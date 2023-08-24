@@ -1,0 +1,4 @@
+account: zeverton
+time: 2:00:00
+nodes: 1
+ntasks-per-node: 4
