@@ -27,7 +27,19 @@ rule checkVars:
 
 rule test:
   input:
-    bams=expand('{intpath}/{samplepaths}.{chromosomes}.bam', intpath = INTPATH, samplepaths=SAMPLEPATHS, chromosomes=CHROMOSOMES)
+    bams=expand('{intpath}/{samplepaths}.{chromosomes}.bai', intpath = INTPATH, samplepaths=SAMPLEPATHS, chromosomes=CHROMOSOMES)
+
+
+rule index:
+  input:
+    bam='{path}.bam'
+  output:
+    bai='{path}.bai'
+  shell:
+    '''
+    module load samtools
+    samtools index {input.bam} -b -o {output.bai}
+    '''
 
 rule bamsplit:
   input:
@@ -40,6 +52,6 @@ rule bamsplit:
   shell:
     '''
     module load samtools
-    samtools view {input.bam} {params.chrP} > {output.bam}
+    samtools view -b {input.bam} {params.chrP} > {output.bam}
     '''
 
