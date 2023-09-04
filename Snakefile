@@ -44,10 +44,10 @@ rule checkVars:
 
 rule week1Benchmark:
   input:
-    pindel=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_pindel.{chrN}.vcf' for a in FCASES], chrN='chr22'),
-    abra2=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_abra.{chrN}.vcf' for a in FCASES], chrN='chr22'),
+    pindel=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_pindel.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
+    abra2=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_abra.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
     rufus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_rufus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
-    platypus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_platypus.{chrN}.vcf' for a in FCASES], chrN='chr22')
+    platypus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_platypus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22')
 
 rule somaticFromGermlinePindel:
   input:
@@ -123,7 +123,7 @@ rule pindel:
   shell:
     '''
     echo "{input.bam}  250  pindel" > {params.bconfig}
-    ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -o {params.prefix} 
+    ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 4 -o {params.prefix} 
     '''
 
 #Insert size of 250 is entirely arbitrary and I don't know how to get a better one. At least this one works without raising errors.
@@ -219,10 +219,12 @@ rule bamsplit:
     samtools view -b {input.bamdir}/*.bam {params.chrP} > {output.bam}
     '''
 
-#rule gzip:
-#  input: '{path}'
-#  output:'{path}.gz'
-#  shell:
-#    '''
-#    gzip -c {input} > {output}
-#    '''
+rule vcfGzip:
+  input: '{path}_somatic_{tool}.{chrN}.vcf'
+  output:'{path}_somatic_{tool}.{chrN}.vcf.gz'
+  wildcard_constraints:
+    tool="pindel|abra|platypus"
+  shell:
+    '''
+    gzip -c {input} > {output}
+    '''
