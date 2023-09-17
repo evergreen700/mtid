@@ -49,6 +49,34 @@ rule week1Benchmark:
     rufus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_rufus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
     platypus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_platypus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22')
 
+rule week2Benchmark:
+  input:
+    graph=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN=CHROMOSOMES),
+
+rule upSetPlot:
+  input:
+    tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.{chrN}.tsv'
+  output:
+    png=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_UPSETPLOT.{chrN}.png'
+  shell:
+    '''
+    module load python/3.11
+    python upset_plot.py {input.tsv} {output.png}
+    '''
+
+rule intersect:
+   input:
+     vcfs=expand(INTPATH+'/{{case_id}}/{{id1}}_AGAINST_{{id2}}_somatic_{tool}.{{chrN}}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
+   output:
+     tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.{chrN}.tsv'
+   params:
+     inpath=INTPATH+'/{case_id}/',
+     chrP='{chrN}'
+   shell:
+     '''
+     ./compare.sh {params.inpath} {params.chrP} > {output.tsv}
+     '''
+
 rule somaticFromGermlinePindel:
   input:
     Tvcf=INTPATH+'/{case_id}/{id1}.{chrN}.pindel.vcf',
@@ -123,7 +151,7 @@ rule pindel:
   shell:
     '''
     echo "{input.bam}  250  pindel" > {params.bconfig}
-    ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 4 -o {params.prefix} 
+    ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 8 -o {params.prefix} 
     '''
 
 #Insert size of 250 is entirely arbitrary and I don't know how to get a better one. At least this one works without raising errors.
@@ -192,8 +220,9 @@ rule platypus:
   shell:
     '''
     module load python/2.7
-    python {input.platypus} callVariants --refFile {input.ref} --bamFiles {input.bam} --output {output.vcf}
+    python {input.platypus} callVariants --refFile {input.ref} --bamFiles {input.bam} --minReads 8 --output {output.vcf}
     '''  
+#minReads 8 is too friendly
 
 rule index:
   input:

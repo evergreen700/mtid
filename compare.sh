@@ -1,5 +1,6 @@
 CASEPATH=$1
 CHROMOSOME=$2
+#MINSIZE=$3
 
 module load bedtools
 
@@ -21,7 +22,7 @@ for TOOL in ${TOOLS[@]}
 do
   HEADER+="${TOOL}\t"
 done
-echo -e "${HEADER}UNIQUE_ENTRIES\tSHARED_ENTRIES"
+echo -e "${HEADER}UNIQUE_ENTRIES\tSHARED_ENTRIES\tEXCLUSIVE_ENTRIES"
 for VCFNUM in ${!TOOLS[@]}
 do
   BLENGTH=$((${#TOOLS[@]}-2))
@@ -43,6 +44,7 @@ do
     SWITCHES="${SWITCHES:0:$VCFNUM}2${SWITCHES:$VCFNUM}"
     VCFB=""
     VCFBU=""
+    VCFANTI=""
     for VCFTWO in ${!TOOLS[@]}
     do
       if [ ${SWITCHES:$VCFTWO:1} -eq "2" ]
@@ -52,15 +54,19 @@ do
       then
         VCFB+="${VCFS[$VCFTWO]} "
         VCFBU+="| bedtools intersect -a stdin -b ${VCFS[$VCFTWO]} -header -u "
+      else
+        VCFANTI+="| bedtools intersect -a stdin -b ${VCFS[$VCFTWO]} -header -v "
       fi
     done
     if [ $i -eq "0" ]
     then
-      LINES=$(gunzip -c $VCFA | grep "^#" -v | grep "PASS" | wc -l)
-      echo -e "$(sed "s/./&\t/g" <<<$SWITCHES)$LINES\t$LINES"
+      LINES=$(gunzip -c $VCFA | awk '{if( sqrt((length($4) - length($5))^2) > 5 ) print $0}' | grep "PASS" | wc -l)
+      eval "gunzip -c $VCFA $VCFANTI > $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.EXCLUSIVE.${CHROMOSOME}.vcf"
+      echo -e "$(sed "s/./&\t/g" <<<$SWITCHES)$LINES\t$LINES\t$(cat $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.EXCLUSIVE.${CHROMOSOME}.vcf | awk '{if( sqrt((length($4) - length($5))^2) > 5) print $0}' | grep "PASS" | wc -l)"
     else
       eval "gunzip -c $VCFA $VCFBU > $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.${CHROMOSOME}.vcf"
-      echo -e "$(sed "s/./&\t/g" <<<$SWITCHES)$(bedtools intersect -a $VCFA -b ${VCFB::-1} -v | grep "PASS" | wc -l)\t$(cat $CASEPATH${TOOLS[$VCFNUM]}.$SWITCHES.vcf | grep "^#" -v | grep "PASS" | wc -l)"
+      eval "gunzip -c $VCFA $VCFBU $VCFANTI > $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.EXCLUSIVE.${CHROMOSOME}.vcf"
+      echo -e "$(sed "s/./&\t/g" <<<$SWITCHES)$(bedtools intersect -a $VCFA -b ${VCFB::-1} -v | grep "PASS" | awk '{if( sqrt((length($4) - length($5))^2) > 5) print $0}' | wc -l)\t$(cat $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.${CHROMOSOME}.vcf | awk '{if( sqrt((length($4) - length($5))^2) > 5) print $0}' | grep "PASS" | wc -l)\t$(cat $BASENAME${TOOLS[$VCFNUM]}.$SWITCHES.EXCLUSIVE.${CHROMOSOME}.vcf | awk '{if( sqrt((length($4) - length($5))^2) > 5) print $0}' | grep "PASS" | wc -l)"
     fi
   done
 done
