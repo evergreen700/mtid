@@ -51,7 +51,7 @@ rule week1Benchmark:
 
 rule week2Benchmark:
   input:
-    graph=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN=CHROMOSOMES),
+    graph=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN="chr1"),
 
 rule upSetPlot:
   input:
@@ -185,7 +185,7 @@ rule ABRAlignSomatic:
     Nbam=INTPATH+'/{case}/{Nid}.WITH_TUMOR.{Tid}_abra.{chrN}.bam'
   shell:
     '''
-    java -Xmx32G -jar {input.abra} --in {input.Nbam},{input.Tbam} --out {output.Nbam},{output.Tbam} --ref {GDCH38} --threads 8
+    java -Xmx16G -jar {input.abra} --in {input.Nbam},{input.Tbam} --out {output.Nbam},{output.Tbam} --ref {GDCH38} --threads 8
     '''
 
 rule RUFUS:

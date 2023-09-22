@@ -5,7 +5,10 @@ import polars as pl
 
 aliquots = pl.read_csv('Data/Manifests/aliquot.tsv', separator='\t')
 samples = pl.read_csv('Data/Manifests/sample.tsv', separator='\t')
+Ccases = pl.read_csv('Data/Manifests/clinical.tsv', separator='\t')
 manifest = pl.read_csv('Data/Manifests/gdc_manifest.2023-08-25.txt', separator='\t')
+
+CcasesFinal = Ccases[["case_id","primary_diagnosis", "tissue_or_organ_of_origin"]]
 
 aExtended = aliquots.join(samples, [a for a in aliquots.columns if a in samples.columns])
 
@@ -17,4 +20,6 @@ cases = samEx[['case_id', 'path', 'sample_type']].groupby(['case_id', 'sample_ty
 
 Tcases = cases.filter(pl.col('Primary Tumor').is_not_null())
 
-Tcases.write_ndjson('Intermediate_Data/CPTAC/manifest.json')
+casesFinal = Tcases.join(CcasesFinal, "case_id")
+
+casesFinal.write_ndjson('Intermediate_Data/CPTAC/manifest.json')

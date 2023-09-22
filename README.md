@@ -3,7 +3,7 @@ Multi-tool indel detection
 
 Current snakemake rules:
   - week1Benchmark: tests current progress. Currently tries to generate Pindel and Abra somatic vcfs. Not all Abra rules are fully working but it's useful for making sure all rules eventually feed into each other. Example run: 
-    ```snakemake -n week1Benchmark --cluster="sbatch --time 4:00:00 --mem 32G --output Log/slurm-%j.out" --jobs=10 --rerun-incomplete```
+    ```snakemake -n week1Benchmark --cluster="sbatch --time 18:00:00 --mem 32G --output Log/slurm-%j.out" --jobs=10 --rerun-incomplete```
 
 Current progress:
   - bamsplit: splits initial files by chromosome to make files more palatable.
@@ -19,3 +19,6 @@ Current progress:
 
 MISC NOTES:
   - Find read length of file: ```samtools view file.bam | head -n 1000000 | cut -f 10 | perl -ne 'chomp;print length($_) . "\n"' | sort | uniq -c | less -S```
+  - Pindel typically runs in 4 hours or less, even for chromosome 1
+  - ABRA runs in 11 - 18 hours for 
+
