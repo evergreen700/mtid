@@ -53,6 +53,20 @@ rule week2Benchmark:
   input:
     graph=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN="chr1"),
 
+rule downloadNewFiles:
+  output:
+    tbam=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bam",
+    tbai=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bai",
+    nbam=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bam",
+    nbai=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bai",
+    cdir=directory(DATAPATH+"/{case_id}")
+  params:
+    case="{case_id}"
+  shell:
+    '''
+    ./download_case {params.case} {output.cdir}
+    '''
+
 rule upSetPlot:
   input:
     tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.{chrN}.tsv'
