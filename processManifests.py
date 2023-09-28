@@ -40,7 +40,7 @@ except:
 
 CcasesFinal = Ccases[["case_id", "case_submitter_id","primary_diagnosis", "tissue_or_organ_of_origin"]]
 
-aExtended = aliquots.join(samples, [a for a in aliquots.columns if a in samples.columns])
+#aExtended = aliquots.join(samples, [a for a in aliquots.columns if a in samples.columns])
 
 manEx = manifest.with_columns(pl.col('Case ID').str.split(by=", ").list.first().alias("case_submitter_id"))
 
