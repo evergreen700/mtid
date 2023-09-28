@@ -10,11 +10,11 @@ DATAPATH = 'Data/CPTAC'
 INTPATH = 'Intermediate_Data/CPTAC'
 DATE = dt.datetime.today().strftime("%Y_%m_%d")
 DAY = dt.datetime.today().strftime("%d")
-CASES = {}
+CASES = []
 with open(MANIFEST, 'r') as manifest:
   for case in manifest.readlines():
     i = json.loads(case)
-    CASES[i['case_id']] = i
+    CASES.append(i)
 
 CHROMOSOMES = ['chr'+str(n) for n in range(1,23)]
 
@@ -22,9 +22,9 @@ PINSUFFIX = ['BP', 'CloseEndMapped', 'D', 'INT_final', 'INV', 'LI', 'RP', 'SI', 
 GDCH38 = 'Data/GDC_h38/GRCh38.d1.vd1.fa'
 GDCH38INFO = 'GRCh38.d1.vd1'
 
-PARTONE = os.listdir(DATAPATH)
-FCASES = [CASES[a] for a in CASES.keys() if CASES[a]['Primary Tumor'][0].split('/')[0] in PARTONE]
-CASESIMP = {a['case_id']:{'Tumor':a['Primary Tumor'][0].split('/')[0], 'Normal':a['Blood Derived Normal'][0].split('/')[0] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'].split('/')[0]} for a in FCASES}
+INCLUDEDCASES = os.listdir(DATAPATH)
+FCASES = [row for row in CASES if CASES["case_id"] in INCLUDEDCASES]
+CASESIMP = {a['case_id']:{'Tumor':a['Primary Tumor'][0]["ID"], 'Normal':a['Blood Derived Normal'][0]["ID"] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0]["ID"]} for a in FCASES}
 CASENAMES = [a['case_id'] for a in FCASES]
 TUMORS = [a['Primary Tumor'][0] for a in FCASES]
 NORMALS = [a['Blood Derived Normal'][0] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0] for a in FCASES]
