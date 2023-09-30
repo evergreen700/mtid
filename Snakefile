@@ -5,8 +5,8 @@ import datetime as dt
 import os
 import json
 
-MANIFEST = 'Intermediate_Data/CPTAC/manifest.json'
-DATAPATH = 'Data/CPTAC'
+MANIFEST = 'Intermediate_Data/CPTAC/newManifest.json'
+DATAPATH = 'Data/CPTAC_DOWNLOADS'
 INTPATH = 'Intermediate_Data/CPTAC'
 DATE = dt.datetime.today().strftime("%Y_%m_%d")
 DAY = dt.datetime.today().strftime("%d")
@@ -22,16 +22,28 @@ PINSUFFIX = ['BP', 'CloseEndMapped', 'D', 'INT_final', 'INV', 'LI', 'RP', 'SI', 
 GDCH38 = 'Data/GDC_h38/GRCh38.d1.vd1.fa'
 GDCH38INFO = 'GRCh38.d1.vd1'
 
-INCLUDEDCASES = os.listdir(DATAPATH)
-FCASES = [row for row in CASES if CASES["case_id"] in INCLUDEDCASES]
-CASESIMP = {a['case_id']:{'Tumor':a['Primary Tumor'][0]["ID"], 'Normal':a['Blood Derived Normal'][0]["ID"] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0]["ID"]} for a in FCASES}
-CASENAMES = [a['case_id'] for a in FCASES]
-TUMORS = [a['Primary Tumor'][0] for a in FCASES]
-NORMALS = [a['Blood Derived Normal'][0] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0] for a in FCASES]
-PARTTWO = {(a, [b for b in os.listdir(DATAPATH+'/'+a) if b.endswith('bam')][0][:-4]) for a in PARTONE}
-#Note: change back index to -18 to take off full _wgs_ tag
-SAMPLEPATHS = ['/'.join(a) for a in PARTTWO]
+#INCLUDEDCASES = os.listdir(DATAPATH)
+FCASES = [CASES[0]]#[row for row in CASES if row["case_id"] in INCLUDEDCASES]
 
+CASEBAMS = {a['case_id']:{'Tumor':a['Aligned Reads- Primary Tumor'][0]["ID"], 'Normal':a['Aligned Reads- Blood Derived Normal'][0]["ID"] if a['Aligned Reads- Blood Derived Normal'] is not None else a['Aligned Reads- Solid Tissue Normal'][0]["ID"]} for a in FCASES}
+#CASEVCFS = {a['case_id']: [].extend(a["Raw Simple Somatic Mutation"]).extend(a["Structural Rearrangement"]) for a in FCASES}
+
+CASENAMES = [a['case_id'] for a in FCASES]
+#TUMORS = [a['Primary Tumor'][0] for a in FCASES]
+#NORMALS = [a['Blood Derived Normal'][0] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0] for a in FCASES]
+#PARTTWO = {(a, [b for b in os.listdir(DATAPATH+'/'+a) if b.endswith('bam')][0][:-4]) for a in PARTONE}
+#Note: change back index to -18 to take off full _wgs_ tag
+#SAMPLEPATHS = ['/'.join(a) for a in PARTTWO]
+#CASEVCFPATHS = []
+#for a in CASENAMES:
+#  for b in CASEVCFS[a]:
+#    CASEVCFPATHS.append(
+
+wildcard_constraints:
+  file_id="[\w-]+",
+  Tfile_id="[\w-]+",
+  Nfile_id="[\w-]+",
+  chrN="chr[\d]+"
 
 #Test rule (shows that snakemake is working)
 rule checkVars:
@@ -42,29 +54,43 @@ rule checkVars:
     echo {params.bams}
     '''
 
+rule downloadVCFs:
+  input:
+    somaticMutation=[[DATAPATH+'/'+a['case_id'] +'/'+b["ID"] for b in a["Raw Simple Somatic Mutation"]] for a in FCASES if a["Raw Simple Somatic Mutation"]!=None],
+    structuralVariants=[[DATAPATH+'/'+a['case_id'] +'/'+b["ID"] for b in a["Structural Rearrangement"]] for a in FCASES if a["Structural Rearrangement"]!=None]
+
+
+
 rule week1Benchmark:
   input:
-    pindel=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_pindel.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
-    abra2=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_abra.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
-    rufus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_rufus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
-    platypus=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_platypus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22')
+    pindel=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_pindel.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
+    abra2=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_abra.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
+    rufus=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_rufus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22'),
+    platypus=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_platypus.{chrN}.vcf.gz' for a in FCASES], chrN='chr22')
 
 rule week2Benchmark:
   input:
-    graph=expand([INTPATH+'/'+a['case_id']+'/'+CASESIMP[a['case_id']]['Tumor']+'_AGAINST_'+CASESIMP[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN="chr1"),
+    graph=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN="chr1"),
+
+rule week3Benchmark:
+  input:
+    table=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN=CHROMOSOMES)
 
 rule downloadNewFiles:
+  input:
+    gdcClient="Tools/gdc-client",
+    token="Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt"
   output:
-    tbam=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bam",
-    tbai=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bai",
-    nbam=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bam",
-    nbai=DATAPATH+"/{case_id}/{tfile_id}/{tfile_name}.bai",
-    cdir=directory(DATAPATH+"/{case_id}")
+    cdir=DATAPATH+"/{case_id}/{file_id}",
+  resources:
+    gdc_download_limit=1
   params:
-    case="{case_id}"
+    casePath=DATAPATH+"/{case_id}",
+    fileID="{file_id}"
   shell:
     '''
-    ./download_case {params.case} {output.cdir}
+    mkdir -p {params.casePath}
+    ./{input.gdcClient} download {params.fileID} -d {params.casePath} -t {input.token}
     '''
 
 rule upSetPlot:
@@ -80,9 +106,9 @@ rule upSetPlot:
 
 rule intersect:
    input:
-     vcfs=expand(INTPATH+'/{{case_id}}/{{id1}}_AGAINST_{{id2}}_somatic_{tool}.{{chrN}}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
+     vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{tool}.{{chrN}}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
    output:
-     tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.{chrN}.tsv'
+     tsv=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_intersections.{chrN}.tsv'
    params:
      inpath=INTPATH+'/{case_id}/',
      chrP='{chrN}'
@@ -93,10 +119,10 @@ rule intersect:
 
 rule somaticFromGermlinePindel:
   input:
-    Tvcf=INTPATH+'/{case_id}/{id1}.{chrN}.pindel.vcf',
-    Nvcf=INTPATH+'/{case_id}/{id2}.{chrN}.pindel.vcf'
+    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.pindel.vcf',
+    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.pindel.vcf'
   output:
-    Svcf=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_pindel.{chrN}.vcf'
+    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_pindel.{chrN}.vcf'
   shell:
     '''
     module load bedtools
@@ -105,28 +131,28 @@ rule somaticFromGermlinePindel:
 
 rule somaticFromGermlinePlatypus:
   input:
-    Tvcf=INTPATH+'/{case_id}/{id1}.{chrN}.platypus.vcf',
-    Nvcf=INTPATH+'/{case_id}/{id2}.{chrN}.platypus.vcf'
+    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.platypus.vcf',
+    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.platypus.vcf'
   output:
-    Svcf=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_platypus.{chrN}.vcf'
+    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_platypus.{chrN}.vcf'
   shell:
     '''
     module load bedtools
     bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
     '''
 
-rule test:
-  input:
-    bams=expand('{intpath}/{samplepaths}_abra.{chromosomes}.bai', intpath = INTPATH, samplepaths=SAMPLEPATHS, chromosomes=CHROMOSOMES)
-
-rule test2:
-  input:
-    pindels=expand('{intpath}/{samplepaths}.{chrN}.pindel.vcf', intpath=INTPATH, samplepaths=SAMPLEPATHS, chrN="chr22", suf=PINSUFFIX)
-
-rule test3:
-  input:
-    pindels=expand('{intpath}/{samplepaths}.{chrN}_{suf}', intpath=INTPATH, samplepaths=SAMPLEPATHS, chrN=CHROMOSOMES, suf='COMBINED')
-
+#rule test:
+#  input:
+#    bams=expand('{intpath}/{samplepaths}_abra.{chromosomes}.bai', intpath = INTPATH, samplepaths=SAMPLEPATHS, chromosomes=CHROMOSOMES)
+#
+#rule test2:
+#  input:
+#    pindels=expand('{intpath}/{samplepaths}.{chrN}.pindel.vcf', intpath=INTPATH, samplepaths=SAMPLEPATHS, chrN="chr22", suf=PINSUFFIX)
+#
+#rule test3:
+#  input:
+#    pindels=expand('{intpath}/{samplepaths}.{chrN}_{suf}', intpath=INTPATH, samplepaths=SAMPLEPATHS, chrN=CHROMOSOMES, suf='COMBINED')
+#
 #pindel rules here
 
 rule pindelVCF:
@@ -152,15 +178,15 @@ rule pindelJoin:
 
 rule pindel:
   input:
-    bam=expand('{intpath}/{{case}}/{{id}}.{{chrN}}.bam', intpath=INTPATH),
-    bai=expand('{intpath}/{{case}}/{{id}}.{{chrN}}.bai', intpath=INTPATH),
+    bam=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bam', intpath=INTPATH),
+    bai=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bai', intpath=INTPATH),
     pinPath='Tools/Pindel/pindel',
     ref=expand('{refpath}', refpath=GDCH38)
   output:
-    pindels=expand('{intpath}/{{case}}/{{id}}.{{chrN}}_{suf}', intpath=INTPATH, suf=PINSUFFIX)
+    pindels=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}_{suf}', intpath=INTPATH, suf=PINSUFFIX)
   params:
-    bconfig=expand('{intpath}/{{case}}/{{id}}.{{chrN}}.config.txt', intpath=INTPATH),
-    prefix=expand('{intpath}/{{case}}/{{id}}.{{chrN}}', intpath=INTPATH),
+    bconfig=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.config.txt', intpath=INTPATH),
+    prefix=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}', intpath=INTPATH),
     chrP='{chrN}'
   shell:
     '''
@@ -174,14 +200,14 @@ rule pindel:
 
 rule CadabraVCF:
   input:
-    Tbam=INTPATH+'/{case}/{Tid}.WITH_NORMAL.{Nid}_abra.{chrN}.bam',
-    Tbai=INTPATH+'/{case}/{Tid}.WITH_NORMAL.{Nid}_abra.{chrN}.bai',
-    Nbam=INTPATH+'/{case}/{Nid}.WITH_TUMOR.{Tid}_abra.{chrN}.bam',
-    Nbai=INTPATH+'/{case}/{Nid}.WITH_TUMOR.{Tid}_abra.{chrN}.bai',
+    Tbam=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bam',
+    Tbai=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bai',
+    Nbam=INTPATH+'/{case}/{Nfile_id}.WITH_TUMOR.{Tfile_id}_abra.{chrN}.bam',
+    Nbai=INTPATH+'/{case}/{Nfile_id}.WITH_TUMOR.{Tfile_id}_abra.{chrN}.bai',
     ref=GDCH38,
     abra='Tools/Abra/abra2-2.23.jar'
   output:
-    vcf=INTPATH+'/{case}/{Tid}_AGAINST_{Nid}_somatic_abra.{chrN}.vcf'
+    vcf=INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_abra.{chrN}.vcf'
   shell:
     '''
     java -Xmx4G -cp {input.abra} abra.cadabra.Cadabra --ref {input.ref} --normal {input.Nbam} --tumor {input.Tbam} > {output.vcf}
@@ -189,14 +215,14 @@ rule CadabraVCF:
 
 rule ABRAlignSomatic:
   input:
-    Tbam=expand('{intpath}/{{case}}/{{Tid}}.{{chrN}}.bam', intpath=INTPATH),
-    Tbai=expand('{intpath}/{{case}}/{{Tid}}.{{chrN}}.bai', intpath=INTPATH),
-    Nbam=expand('{intpath}/{{case}}/{{Nid}}.{{chrN}}.bam', intpath=INTPATH),
-    Nbai=expand('{intpath}/{{case}}/{{Nid}}.{{chrN}}.bai', intpath=INTPATH),
+    Tbam=expand('{intpath}/{{case}}/{{Tfile_id}}.{{chrN}}.bam', intpath=INTPATH),
+    Tbai=expand('{intpath}/{{case}}/{{Tfile_id}}.{{chrN}}.bai', intpath=INTPATH),
+    Nbam=expand('{intpath}/{{case}}/{{Nfile_id}}.{{chrN}}.bam', intpath=INTPATH),
+    Nbai=expand('{intpath}/{{case}}/{{Nfile_id}}.{{chrN}}.bai', intpath=INTPATH),
     abra='Tools/Abra/abra2-2.23.jar'
   output:
-    Tbam=INTPATH+'/{case}/{Tid}.WITH_NORMAL.{Nid}_abra.{chrN}.bam',
-    Nbam=INTPATH+'/{case}/{Nid}.WITH_TUMOR.{Tid}_abra.{chrN}.bam'
+    Tbam=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bam',
+    Nbam=INTPATH+'/{case}/{Nfile_id}.WITH_TUMOR.{Tfile_id}_abra.{chrN}.bam'
   shell:
     '''
     java -Xmx16G -jar {input.abra} --in {input.Nbam},{input.Tbam} --out {output.Nbam},{output.Tbam} --ref {GDCH38} --threads 8
@@ -204,17 +230,17 @@ rule ABRAlignSomatic:
 
 rule RUFUS:
   input:
-    Tbam=INTPATH+'/{case}/{Tid}.{chrN}.bam',
-    Tbai=INTPATH+'/{case}/{Tid}.{chrN}.bai',
-    Nbam=INTPATH+'/{case}/{Nid}.{chrN}.bam',
-    Nbai=INTPATH+'/{case}/{Nid}.{chrN}.bai',
+    Tbam=INTPATH+'/{case}/{Tfile_id}.{chrN}.bam',
+    Tbai=INTPATH+'/{case}/{Tfile_id}.{chrN}.bai',
+    Nbam=INTPATH+'/{case}/{Nfile_id}.{chrN}.bam',
+    Nbai=INTPATH+'/{case}/{Nfile_id}.{chrN}.bai',
     ref=GDCH38,
     rufus='Tools/Rufus/RUFUS/runRufus.sh'
   output:
-    vcf=INTPATH+'/{case}/{Tid}_AGAINST_{Nid}_somatic_rufus.{chrN}.vcf.gz'
+    vcf=INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_rufus.{chrN}.vcf.gz'
   params:
     ksize=25,
-    rawOutput='{Tid}.{chrN}.bam.generator.V2.overlap.hashcount.fastq.bam.FINAL.vcf.gz'
+    rawOutput='{Tfile_id}.{chrN}.bam.generator.V2.overlap.hashcount.fastq.bam.FINAL.vcf.gz'
   shell:
     '''
     module load samtools
@@ -225,12 +251,12 @@ rule RUFUS:
 
 rule platypus:
   input:
-    bam=INTPATH+'/{case}/{id}.{chrN}.bam',
-    bai=INTPATH+'/{case}/{id}.{chrN}.bai',
+    bam=INTPATH+'/{case}/{file_id}.{chrN}.bam',
+    bai=INTPATH+'/{case}/{file_id}.{chrN}.bai',
     ref=GDCH38,
     platypus='Tools/Platypus_0.8.1/Platypus.py'
   output:
-    vcf=INTPATH+'/{case}/{id}.{chrN}.platypus.vcf'
+    vcf=INTPATH+'/{case}/{file_id}.{chrN}.platypus.vcf'
   shell:
     '''
     module load python/2.7
@@ -251,9 +277,9 @@ rule index:
 
 rule bamsplit:
   input:
-    bamdir=expand('{datapath}/{{id}}/', datapath=DATAPATH),
+    bamdir=expand('{datapath}/{{case}}/{{file_id}}/', datapath=DATAPATH),
   output:
-    bam=expand('{intpath}/{{case}}/{{id}}.{{chrN}}.bam', intpath=INTPATH)
+    bam=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bam', intpath=INTPATH)
   params:
     chrP='{chrN}'
   shell:
