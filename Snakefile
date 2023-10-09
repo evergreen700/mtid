@@ -28,6 +28,20 @@ FCASES = [CASES[0]]#[row for row in CASES if row["case_id"] in INCLUDEDCASES]
 CASEBAMS = {a['case_id']:{'Tumor':a['Aligned Reads- Primary Tumor'][0]["ID"], 'Normal':a['Aligned Reads- Blood Derived Normal'][0]["ID"] if a['Aligned Reads- Blood Derived Normal'] is not None else a['Aligned Reads- Solid Tissue Normal'][0]["ID"]} for a in FCASES}
 #CASEVCFS = {a['case_id']: [].extend(a["Raw Simple Somatic Mutation"]).extend(a["Structural Rearrangement"]) for a in FCASES}
 
+with open("symDirs.sh", "w") as outSymManifest:
+  with open("vcfLog.txt", "w") as outManifest:
+    for c in CASES:
+      outManifest.write("mkdir -p "+DATAPATH+"/"+c["case_id"]+"\n")
+      outSymManifest.write("ln -sfnr "+DATAPATH+"/"+c["case_id"]+ " Data/CASE_SYMLINKS/" + c["case_submitter_id"] + "\n")
+      if c["Raw Simple Somatic Mutation"]!=None:
+        for v in c["Raw Simple Somatic Mutation"]:
+          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
+      if c["Structural Rearrangement"]!=None:
+        for v in c["Structural Rearrangement"]:
+          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
+  
+
+
 CASENAMES = [a['case_id'] for a in FCASES]
 #TUMORS = [a['Primary Tumor'][0] for a in FCASES]
 #NORMALS = [a['Blood Derived Normal'][0] if a['Blood Derived Normal'] is not None else a['Solid Tissue Normal'][0] for a in FCASES]
@@ -38,6 +52,8 @@ CASENAMES = [a['case_id'] for a in FCASES]
 #for a in CASENAMES:
 #  for b in CASEVCFS[a]:
 #    CASEVCFPATHS.append(
+
+localrules: downloadNewFiles
 
 wildcard_constraints:
   file_id="[\w-]+",
@@ -77,11 +93,12 @@ rule week3Benchmark:
     table=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN=CHROMOSOMES)
 
 rule downloadNewFiles:
+  priority: 0
   input:
     gdcClient="Tools/gdc-client",
     token="Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt"
   output:
-    cdir=DATAPATH+"/{case_id}/{file_id}",
+    cdir=directory(DATAPATH+"/{case_id}/{file_id}"),
   resources:
     gdc_download_limit=1
   params:
@@ -105,6 +122,7 @@ rule upSetPlot:
     '''
 
 rule intersect:
+   priority: 2
    input:
      vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{tool}.{{chrN}}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
    output:
@@ -118,6 +136,7 @@ rule intersect:
      '''
 
 rule somaticFromGermlinePindel:
+  priority: 2
   input:
     Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.pindel.vcf',
     Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.pindel.vcf'
@@ -130,6 +149,7 @@ rule somaticFromGermlinePindel:
     '''
 
 rule somaticFromGermlinePlatypus:
+  priority: 2
   input:
     Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.platypus.vcf',
     Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.platypus.vcf'
@@ -156,6 +176,7 @@ rule somaticFromGermlinePlatypus:
 #pindel rules here
 
 rule pindelVCF:
+  priority: 2
   input:
     pindel='{path}_COMBINED',
     pin2vcf='Tools/Pindel/pindel2vcf'
@@ -167,6 +188,7 @@ rule pindelVCF:
     '''
 
 rule pindelJoin:
+  priority: 2
   input:
     pindels=expand('{{path}}_{suf}', suf=PINSUFFIX)
   output:
@@ -177,6 +199,7 @@ rule pindelJoin:
     '''
 
 rule pindel:
+  priority: 2
   input:
     bam=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bam', intpath=INTPATH),
     bai=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bai', intpath=INTPATH),
@@ -199,6 +222,7 @@ rule pindel:
 #ABRA2 rules here
 
 rule CadabraVCF:
+  priority: 3
   input:
     Tbam=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bam',
     Tbai=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bai',
@@ -214,6 +238,7 @@ rule CadabraVCF:
     '''
 
 rule ABRAlignSomatic:
+  priority: 3
   input:
     Tbam=expand('{intpath}/{{case}}/{{Tfile_id}}.{{chrN}}.bam', intpath=INTPATH),
     Tbai=expand('{intpath}/{{case}}/{{Tfile_id}}.{{chrN}}.bai', intpath=INTPATH),
@@ -229,6 +254,7 @@ rule ABRAlignSomatic:
     '''
 
 rule RUFUS:
+  priority: 3
   input:
     Tbam=INTPATH+'/{case}/{Tfile_id}.{chrN}.bam',
     Tbai=INTPATH+'/{case}/{Tfile_id}.{chrN}.bai',
@@ -245,11 +271,12 @@ rule RUFUS:
     '''
     module load samtools
     module load bedtools
-    ./{input.rufus} --subject {input.Tbam} --controls {input.Nbam} --kmersize {params.ksize} --threads 41 --ref {input.ref}
+    ./{input.rufus} --subject {input.Tbam} --controls {input.Nbam} --kmersize {params.ksize} --min 8 --threads 41 --ref {input.ref}
     mv {params.rawOutput} {output.vcf}
     '''
 
 rule platypus:
+  priority: 2
   input:
     bam=INTPATH+'/{case}/{file_id}.{chrN}.bam',
     bai=INTPATH+'/{case}/{file_id}.{chrN}.bai',
@@ -265,6 +292,7 @@ rule platypus:
 #minReads 8 is too friendly
 
 rule index:
+  priority: 2
   input:
     bam='{path}.bam'
   output:
@@ -276,6 +304,7 @@ rule index:
     '''
 
 rule bamsplit:
+  priority: 1
   input:
     bamdir=expand('{datapath}/{{case}}/{{file_id}}/', datapath=DATAPATH),
   output:
@@ -289,6 +318,7 @@ rule bamsplit:
     '''
 
 rule vcfGzip:
+  priority: 2
   input: '{path}_somatic_{tool}.{chrN}.vcf'
   output:'{path}_somatic_{tool}.{chrN}.vcf.gz'
   wildcard_constraints:

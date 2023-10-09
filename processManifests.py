@@ -48,10 +48,10 @@ manEx = manifest.with_columns(pl.col('Case ID').str.split(by=", ").list.first().
 #aliEx = manEx.join(aliquots, [a for a in aliquots.columns if a in manEx.columns])
 samEx = manEx.join(CcasesFinal, [a for a in manEx.columns if a in CcasesFinal.columns])
 
-samReduced = samEx.with_columns(pl.when(pl.col("Data Type")=="Aligned Reads").then("Aligned Reads- "+pl.col("Sample Type")).otherwise(pl.col("Data Type")).alias("fulltype"),pl.concat_list(pl.col(["File ID", "File Name"])).list.to_struct(fields=["ID", "NAME"]).alias("File_Parts"))[["File_Parts", "case_id","fulltype", "primary_diagnosis","tissue_or_organ_of_origin"]]
+samReduced = samEx.with_columns(pl.when(pl.col("Data Type")=="Aligned Reads").then("Aligned Reads- "+pl.col("Sample Type")).otherwise(pl.col("Data Type")).alias("fulltype"),pl.concat_list(pl.col(["File ID", "File Name"])).list.to_struct(fields=["ID", "NAME"]).alias("File_Parts"))[["File_Parts", "case_id", "case_submitter_id","fulltype", "primary_diagnosis","tissue_or_organ_of_origin"]]
 
 
-cases = samReduced.group_by(pl.all().exclude("File_Parts")).all().pivot(index=['case_id', 'primary_diagnosis','tissue_or_organ_of_origin'], columns='fulltype', values='File_Parts')
+cases = samReduced.group_by(pl.all().exclude("File_Parts")).all().pivot(index=['case_id', 'case_submitter_id', 'primary_diagnosis','tissue_or_organ_of_origin'], columns='fulltype', values='File_Parts')
 
 casesFinal = cases.filter(pl.col('Aligned Reads- Primary Tumor').is_not_null())
 
