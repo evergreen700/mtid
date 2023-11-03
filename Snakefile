@@ -28,18 +28,19 @@ FCASES = [CASES[0]]#[row for row in CASES if row["case_id"] in INCLUDEDCASES]
 CASEBAMS = {a['case_id']:{'Tumor':a['Aligned Reads- Primary Tumor'][0]["ID"], 'Normal':a['Aligned Reads- Blood Derived Normal'][0]["ID"] if a['Aligned Reads- Blood Derived Normal'] is not None else a['Aligned Reads- Solid Tissue Normal'][0]["ID"]} for a in FCASES}
 #CASEVCFS = {a['case_id']: [].extend(a["Raw Simple Somatic Mutation"]).extend(a["Structural Rearrangement"]) for a in FCASES}
 
-with open("symDirs.sh", "w") as outSymManifest:
-  with open("vcfLog.txt", "w") as outManifest:
-    for c in CASES:
-      outManifest.write("mkdir -p "+DATAPATH+"/"+c["case_id"]+"\n")
-      outSymManifest.write("ln -sfnr "+DATAPATH+"/"+c["case_id"]+ " Data/CASE_SYMLINKS/" + c["case_submitter_id"] + "\n")
-      if c["Raw Simple Somatic Mutation"]!=None:
-        for v in c["Raw Simple Somatic Mutation"]:
-          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
-      if c["Structural Rearrangement"]!=None:
-        for v in c["Structural Rearrangement"]:
-          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
-  
+##For downloading without snakemake
+#with open("symDirs.sh", "w") as outSymManifest:
+#  with open("vcfLog.txt", "w") as outManifest:
+#    for c in CASES:
+#      outManifest.write("mkdir -p "+DATAPATH+"/"+c["case_id"]+"\n")
+#      outSymManifest.write("ln -sfnr "+DATAPATH+"/"+c["case_id"]+ " Data/CASE_SYMLINKS/" + c["case_submitter_id"] + "\n")
+#      if c["Raw Simple Somatic Mutation"]!=None:
+#        for v in c["Raw Simple Somatic Mutation"]:
+#          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
+#      if c["Structural Rearrangement"]!=None:
+#        for v in c["Structural Rearrangement"]:
+#          outManifest.write("./Tools/gdc-client download "+v["ID"]+" -t Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt -d "+DATAPATH+"/"+c["case_id"]+"\n")
+#  
 
 
 CASENAMES = [a['case_id'] for a in FCASES]
@@ -59,7 +60,9 @@ wildcard_constraints:
   file_id="[\w-]+",
   Tfile_id="[\w-]+",
   Nfile_id="[\w-]+",
-  chrN="chr[\d]+"
+  chrN="chr[\d]+",
+  gTool="pindel|platypus"
+
 
 #Test rule (shows that snakemake is working)
 rule checkVars:
@@ -90,7 +93,7 @@ rule week2Benchmark:
 
 rule week3Benchmark:
   input:
-    table=expand([INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_intersections.{chrN}.tsv' for a in FCASES], chrN=CHROMOSOMES)
+    table=[INTPATH+'/'+a['case_id']+'/'+CASEBAMS[a['case_id']]['Tumor']+'_AGAINST_'+CASEBAMS[a['case_id']]['Normal']+'_somatic_intersections.tsv' for a in FCASES]
 
 rule downloadNewFiles:
   priority: 0
@@ -112,9 +115,9 @@ rule downloadNewFiles:
 
 rule upSetPlot:
   input:
-    tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.{chrN}.tsv'
+    tsv=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_intersections.tsv'
   output:
-    png=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_UPSETPLOT.{chrN}.png'
+    png=INTPATH+'/{case_id}/{id1}_AGAINST_{id2}_somatic_UPSETPLOT.png'
   shell:
     '''
     module load python/3.11
@@ -135,31 +138,65 @@ rule intersect:
      ./compare.sh {params.inpath} {params.chrP} > {output.tsv}
      '''
 
-rule somaticFromGermlinePindel:
+rule intersectAll:
+   priority: 2
+   input:
+     vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{tool}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
+   output:
+     tsv=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_intersections.tsv'
+   params:
+     inpath=INTPATH+'/{case_id}/',
+     Tdatapath=DATAPATH+'/{case_id}/{Tfile_id}',
+     Ndatapath=DATAPATH+'/{case_id}/{Nfile_id}'
+   shell:
+     '''
+     ./compareAll.sh {params.inpath} > {output.tsv}
+     rm {params.inpath}*.bam
+     rm {params.inpath}*.bai
+     rm -rf {params.Tdatapath}
+     rm -rf {params.Ndatapath}
+     '''
+
+rule wholeGenomeVCF:
   priority: 2
   input:
-    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.pindel.vcf',
-    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.pindel.vcf'
+    vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{{tool}}.{chrN}.vcf.gz', chrN=CHROMOSOMES)
   output:
-    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_pindel.{chrN}.vcf'
+    vcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.vcf.gz'
+  params:
+    first=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.chr1.vcf.gz'
   shell:
     '''
-    module load bedtools
-    bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
+    cat {params.first} | grep "^#" > {output.vcf}
+    cat {input.vcfs} | grep -v "^#" >> {output.vcf}
     '''
 
-rule somaticFromGermlinePlatypus:
+rule somaticFromGermline:
   priority: 2
   input:
-    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.platypus.vcf',
-    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.platypus.vcf'
+    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.{gTool}.vcf',
+    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.{gTool}.vcf'
   output:
-    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_platypus.{chrN}.vcf'
+    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{gTool}.{chrN}.vcf'
   shell:
     '''
     module load bedtools
     bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
+    rm {input.Tvcf} {input.Nvcf}
     '''
+
+#rule somaticFromGermlinePlatypus:
+#  priority: 2
+#  input:
+#    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.platypus.vcf',
+#    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.platypus.vcf'
+#  output:
+#    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_platypus.{chrN}.vcf'
+#  shell:
+#    '''
+#    module load bedtools
+#    bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
+#    '''
 
 #rule test:
 #  input:
@@ -185,6 +222,7 @@ rule pindelVCF:
   shell:
     '''
     ./{input.pin2vcf} -p {input.pindel} -r {GDCH38} -R {GDCH38INFO} -d 2023 -v {output.vcf}
+    rm {input.pindel}
     '''
 
 rule pindelJoin:
@@ -196,6 +234,7 @@ rule pindelJoin:
   shell:
     '''
     cat {input.pindels} > {output.pindel}
+    rm {input.pindels}
     '''
 
 rule pindel:
@@ -255,6 +294,7 @@ rule ABRAlignSomatic:
 
 rule RUFUS:
   priority: 3
+  shadow: "shallow"
   input:
     Tbam=INTPATH+'/{case}/{Tfile_id}.{chrN}.bam',
     Tbai=INTPATH+'/{case}/{Tfile_id}.{chrN}.bai',
@@ -266,7 +306,7 @@ rule RUFUS:
     vcf=INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_rufus.{chrN}.vcf.gz'
   params:
     ksize=25,
-    rawOutput='{Tfile_id}.{chrN}.bam.generator.V2.overlap.hashcount.fastq.bam.FINAL.vcf.gz'
+    rawOutput='{Tfile_id}.{chrN}.bam.generator.V2.overlap.hashcount.fastq.bam.FINAL.vcf.gz',
   shell:
     '''
     module load samtools
@@ -325,5 +365,5 @@ rule vcfGzip:
     tool="pindel|abra|platypus"
   shell:
     '''
-    gzip -c {input} > {output}
+    gzip {input}
     '''
