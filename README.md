@@ -6,16 +6,23 @@ Current snakemake rules:
     ```snakemake -n week1Benchmark --cluster="sbatch --time 18:00:00 --mem 32G --output Log/slurm-%j.out" --jobs=10 --rerun-incomplete```
 
 Current progress:
+  - downloadNewFiles: downloads a file from the GDC. Requires you to have an access token
   - bamsplit: splits initial files by chromosome to make files more palatable.
   - index: indexes newly created bam files from samtools and abra2
   - pindel: runs pindel on one bam/bai combo. Generates a set of output files
   - pindeljoin: concatonates the pindel files into one big file
   - pindelvcf: takes the file from pindeljoin and converts it into a VCF
-  - somaticFromGermlinePindel/Platypus: takes Tumor/Normal vcf pairs and returns a vcf of mutations not seen in normal tissue
+  - somaticFromGermline: takes Tumor/Normal vcf pairs and returns a vcf of mutations not seen in normal tissue
   - ABRAlignSomatic: realigns bam files in tumor/normal pairs
   - CadabraVCF: somatic mutation caller that uses the flags created by ABRA
   - RUFUS: somatic mutation caller that uses k-mers
   - platypus: other mutation caller that Ohio State people recommended
+  - vcfGzip: gzips vcf files for tools that do not normally gzip output
+  - wholeGenomeVCF: combines vcfs for each chromosome into one vcf.
+  - intersect: creates intersection tsv and vcfs for a given chromosome
+  - intersectAll: creates intersection tsv and vcfs for a whole genome
+  - upSetPlot: creates an upSetPlot image for a given intersection tsv. !Running into python version issues right now!
+
 
 MISC NOTES:
   - Find read length of file: ```samtools view file.bam | head -n 1000000 | cut -f 10 | perl -ne 'chomp;print length($_) . "\n"' | sort | uniq -c | less -S```
