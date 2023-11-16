@@ -1,4 +1,14 @@
+#tools being used
 tools:
   - pindel
   - ABRA2
   - RUFUS
+
+#relative path to manifest json file
+manifest: Intermediate_Data/CPTAC/newManifest.json
+#path to directory for storing downloaded files
+dataPath: Data/CPTAC_DOWNLOADS
+#path to directory for storing intermediate files
+intPath: Intermediate_Data/CPTAC
+#path to gdc token file (used to authenticate downloads
+gdcToken: Data/New/gdc-user-token.2023-11-06T17_59_57.552Z.txt

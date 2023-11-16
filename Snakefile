@@ -5,9 +5,10 @@ import datetime as dt
 import os
 import json
 
-MANIFEST = 'Intermediate_Data/CPTAC/newManifest.json'
-DATAPATH = 'Data/CPTAC_DOWNLOADS'
-INTPATH = 'Intermediate_Data/CPTAC'
+MANIFEST = config["manifest"]#'Intermediate_Data/CPTAC/newManifest.json'
+DATAPATH = config["dataPath"]#'Data/CPTAC_DOWNLOADS'
+INTPATH = config["intPath"]#'Intermediate_Data/CPTAC'
+TOKENPATH = config["gdcToken"]
 DATE = dt.datetime.today().strftime("%Y_%m_%d")
 DAY = dt.datetime.today().strftime("%d")
 CASES = []
@@ -23,7 +24,11 @@ GDCH38 = 'Data/GDC_h38/GRCh38.d1.vd1.fa'
 GDCH38INFO = 'GRCh38.d1.vd1'
 
 #INCLUDEDCASES = os.listdir(DATAPATH)
-FCASES = [CASES[0]]#[row for row in CASES if row["case_id"] in INCLUDEDCASES]
+#FCASES = CASES[100:]#[row for row in CASES if row["case_id"] in INCLUDEDCASES]
+
+LUAD_CASES = [a for a in CASES if a["primary_diagnosis"] == "Adenocarcinoma, NOS" and "lung" in a["tissue_or_organ_of_origin"]]
+
+FCASES = LUAD_CASES[:10]
 
 CASEBAMS = {a['case_id']:{'Tumor':a['Aligned Reads- Primary Tumor'][0]["ID"], 'Normal':a['Aligned Reads- Blood Derived Normal'][0]["ID"] if a['Aligned Reads- Blood Derived Normal'] is not None else a['Aligned Reads- Solid Tissue Normal'][0]["ID"]} for a in FCASES}
 #CASEVCFS = {a['case_id']: [].extend(a["Raw Simple Somatic Mutation"]).extend(a["Structural Rearrangement"]) for a in FCASES}
@@ -99,7 +104,7 @@ rule downloadNewFiles:
   priority: 0
   input:
     gdcClient="Tools/gdc-client",
-    token="Data/New/gdc-user-token.2023-09-26T20_07_40.822Z.txt"
+    token=TOKENPATH#"Data/New/gdc-user-token.2023-11-06T17_59_57.552Z.txt"
   output:
     cdir=directory(DATAPATH+"/{case_id}/{file_id}"),
   resources:
@@ -141,7 +146,7 @@ rule intersect:
 rule intersectAll:
    priority: 2
    input:
-     vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{tool}.vcf.gz', tool=['pindel','abra','rufus','platypus'])
+     vcfs=expand(INTPATH+'/{{case_id}}/{{Tfile_id}}_AGAINST_{{Nfile_id}}_somatic_{tool}.vcf.gz', tool=['pindel','abra','platypus'])
    output:
      tsv=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_intersections.tsv'
    params:
@@ -151,8 +156,8 @@ rule intersectAll:
    shell:
      '''
      ./compareAll.sh {params.inpath} > {output.tsv}
-     rm {params.inpath}*.bam
-     rm {params.inpath}*.bai
+     rm -f {params.inpath}*.bam
+     rm -f {params.inpath}*.bai
      rm -rf {params.Tdatapath}
      rm -rf {params.Ndatapath}
      '''
@@ -164,11 +169,14 @@ rule wholeGenomeVCF:
   output:
     vcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.vcf.gz'
   params:
-    first=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.chr1.vcf.gz'
+    first=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.chr1.vcf.gz',
+    preCompressed=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{tool}.vcf'
   shell:
     '''
-    cat {params.first} | grep "^#" > {output.vcf}
-    cat {input.vcfs} | grep -v "^#" >> {output.vcf}
+    zcat {params.first} | grep "^#" > {params.preCompressed}
+    zcat {input.vcfs} | grep -v "^#" >> {params.preCompressed}
+    gzip -f {params.preCompressed}
+    rm {input.vcfs}
     '''
 
 rule somaticFromGermline:
@@ -184,19 +192,6 @@ rule somaticFromGermline:
     bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
     rm {input.Tvcf} {input.Nvcf}
     '''
-
-#rule somaticFromGermlinePlatypus:
-#  priority: 2
-#  input:
-#    Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.platypus.vcf',
-#    Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.platypus.vcf'
-#  output:
-#    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_platypus.{chrN}.vcf'
-#  shell:
-#    '''
-#    module load bedtools
-#    bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
-#    '''
 
 #rule test:
 #  input:
@@ -254,6 +249,7 @@ rule pindel:
     '''
     echo "{input.bam}  250  pindel" > {params.bconfig}
     ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 8 -o {params.prefix} 
+    rm {params.bconfig}
     '''
 
 #Insert size of 250 is entirely arbitrary and I don't know how to get a better one. At least this one works without raising errors.
