@@ -234,6 +234,7 @@ rule pindelJoin:
 
 rule pindel:
   priority: 2
+  shadow: "shallow"
   input:
     bam=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bam', intpath=INTPATH),
     bai=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bai', intpath=INTPATH),
@@ -249,8 +250,9 @@ rule pindel:
     '''
     echo "{input.bam}  250  pindel" > {params.bconfig}
     ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 8 -o {params.prefix} 
-    rm {params.bconfig}
     '''
+#    rm {params.bconfig}
+#   '''
 
 #Insert size of 250 is entirely arbitrary and I don't know how to get a better one. At least this one works without raising errors.
 
