@@ -28,7 +28,7 @@ GDCH38INFO = 'GRCh38.d1.vd1'
 
 LUAD_CASES = [a for a in CASES if a["primary_diagnosis"] == "Adenocarcinoma, NOS" and "lung" in a["tissue_or_organ_of_origin"]]
 
-FCASES = LUAD_CASES[:10]
+FCASES = LUAD_CASES[10:]
 
 CASEBAMS = {a['case_id']:{'Tumor':a['Aligned Reads- Primary Tumor'][0]["ID"], 'Normal':a['Aligned Reads- Blood Derived Normal'][0]["ID"] if a['Aligned Reads- Blood Derived Normal'] is not None else a['Aligned Reads- Solid Tissue Normal'][0]["ID"]} for a in FCASES}
 #CASEVCFS = {a['case_id']: [].extend(a["Raw Simple Somatic Mutation"]).extend(a["Structural Rearrangement"]) for a in FCASES}
@@ -106,7 +106,7 @@ rule downloadNewFiles:
     gdcClient="Tools/gdc-client",
     token=TOKENPATH#"Data/New/gdc-user-token.2023-11-06T17_59_57.552Z.txt"
   output:
-    cdir=directory(DATAPATH+"/{case_id}/{file_id}"),
+    cdir=temp(directory(DATAPATH+"/{case_id}/{file_id}"))
   resources:
     gdc_download_limit=1
   params:
@@ -156,11 +156,12 @@ rule intersectAll:
    shell:
      '''
      ./compareAll.sh {params.inpath} > {output.tsv}
-     rm -f {params.inpath}*.bam
-     rm -f {params.inpath}*.bai
-     rm -rf {params.Tdatapath}
-     rm -rf {params.Ndatapath}
      '''
+#     rm -f {params.inpath}*.bam
+#     rm -f {params.inpath}*.bai
+#     rm -rf {params.Tdatapath}
+#     rm -rf {params.Ndatapath}
+#     '''
 
 rule wholeGenomeVCF:
   priority: 2
@@ -176,8 +177,9 @@ rule wholeGenomeVCF:
     zcat {params.first} | grep "^#" > {params.preCompressed}
     zcat {input.vcfs} | grep -v "^#" >> {params.preCompressed}
     gzip -f {params.preCompressed}
-    rm {input.vcfs}
     '''
+#    rm {input.vcfs}
+#    '''
 
 rule somaticFromGermline:
   priority: 2
@@ -185,13 +187,14 @@ rule somaticFromGermline:
     Tvcf=INTPATH+'/{case_id}/{Tfile_id}.{chrN}.{gTool}.vcf',
     Nvcf=INTPATH+'/{case_id}/{Nfile_id}.{chrN}.{gTool}.vcf'
   output:
-    Svcf=INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{gTool}.{chrN}.vcf'
+    Svcf=temp(INTPATH+'/{case_id}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_{gTool}.{chrN}.vcf')
   shell:
     '''
     module load bedtools
     bedtools intersect -a {input.Tvcf} -b {input.Nvcf} -v -header > {output.Svcf}
-    rm {input.Tvcf} {input.Nvcf}
     '''
+#    rm {input.Tvcf} {input.Nvcf}
+#    '''
 
 #rule test:
 #  input:
@@ -213,24 +216,26 @@ rule pindelVCF:
     pindel='{path}_COMBINED',
     pin2vcf='Tools/Pindel/pindel2vcf'
   output:
-    vcf='{path}.pindel.vcf'
+    vcf=temp('{path}.pindel.vcf')
   shell:
     '''
     ./{input.pin2vcf} -p {input.pindel} -r {GDCH38} -R {GDCH38INFO} -d 2023 -v {output.vcf}
-    rm {input.pindel}
     '''
+#    rm {input.pindel}
+#    '''
 
 rule pindelJoin:
   priority: 2
   input:
     pindels=expand('{{path}}_{suf}', suf=PINSUFFIX)
   output:
-    pindel='{path}_COMBINED'
+    pindel=temp('{path}_COMBINED')
   shell:
     '''
     cat {input.pindels} > {output.pindel}
-    rm {input.pindels}
     '''
+#    rm {input.pindels}
+#    '''
 
 rule pindel:
   priority: 2
@@ -241,15 +246,15 @@ rule pindel:
     pinPath='Tools/Pindel/pindel',
     ref=expand('{refpath}', refpath=GDCH38)
   output:
-    pindels=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}_{suf}', intpath=INTPATH, suf=PINSUFFIX)
+    pindels=temp(expand(INTPATH+'/{{case}}/{{file_id}}.{{chrN}}_{suf}', suf=PINSUFFIX)),
+    bconfig=temp(INTPATH+'/{case}/{file_id}.{chrN}.config.txt')
   params:
-    bconfig=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.config.txt', intpath=INTPATH),
     prefix=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}', intpath=INTPATH),
     chrP='{chrN}'
   shell:
     '''
-    echo "{input.bam}  250  pindel" > {params.bconfig}
-    ./{input.pinPath} -f {input.ref} -i {params.bconfig} -c {params.chrP} -A 30 -M 8 -o {params.prefix} 
+    echo "{input.bam}  250  pindel" > {output.bconfig}
+    ./{input.pinPath} -f {input.ref} -i {output.bconfig} -c {params.chrP} -A 30 -M 8 -o {params.prefix} 
     '''
 #    rm {params.bconfig}
 #   '''
@@ -268,7 +273,7 @@ rule CadabraVCF:
     ref=GDCH38,
     abra='Tools/Abra/abra2-2.23.jar'
   output:
-    vcf=INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_abra.{chrN}.vcf'
+    vcf=temp(INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_abra.{chrN}.vcf')
   shell:
     '''
     java -Xmx4G -cp {input.abra} abra.cadabra.Cadabra --ref {input.ref} --normal {input.Nbam} --tumor {input.Tbam} > {output.vcf}
@@ -283,8 +288,8 @@ rule ABRAlignSomatic:
     Nbai=expand('{intpath}/{{case}}/{{Nfile_id}}.{{chrN}}.bai', intpath=INTPATH),
     abra='Tools/Abra/abra2-2.23.jar'
   output:
-    Tbam=INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bam',
-    Nbam=INTPATH+'/{case}/{Nfile_id}.WITH_TUMOR.{Tfile_id}_abra.{chrN}.bam'
+    Tbam=temp(INTPATH+'/{case}/{Tfile_id}.WITH_NORMAL.{Nfile_id}_abra.{chrN}.bam'),
+    Nbam=temp(INTPATH+'/{case}/{Nfile_id}.WITH_TUMOR.{Tfile_id}_abra.{chrN}.bam')
   shell:
     '''
     java -Xmx16G -jar {input.abra} --in {input.Nbam},{input.Tbam} --out {output.Nbam},{output.Tbam} --ref {GDCH38} --threads 8
@@ -301,7 +306,7 @@ rule RUFUS:
     ref=GDCH38,
     rufus='Tools/Rufus/RUFUS/runRufus.sh'
   output:
-    vcf=INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_rufus.{chrN}.vcf.gz'
+    vcf=temp(INTPATH+'/{case}/{Tfile_id}_AGAINST_{Nfile_id}_somatic_rufus.{chrN}.vcf.gz')
   params:
     ksize=25,
     rawOutput='{Tfile_id}.{chrN}.bam.generator.V2.overlap.hashcount.fastq.bam.FINAL.vcf.gz',
@@ -321,7 +326,7 @@ rule platypus:
     ref=GDCH38,
     platypus='Tools/Platypus_0.8.1/Platypus.py'
   output:
-    vcf=INTPATH+'/{case}/{file_id}.{chrN}.platypus.vcf'
+    vcf=temp(INTPATH+'/{case}/{file_id}.{chrN}.platypus.vcf')
   shell:
     '''
     module load python/2.7
@@ -334,7 +339,7 @@ rule index:
   input:
     bam='{path}.bam'
   output:
-    bai='{path}.bai'
+    bai=temp('{path}.bai')
   shell:
     '''
     module load samtools
@@ -344,9 +349,9 @@ rule index:
 rule bamsplit:
   priority: 1
   input:
-    bamdir=expand('{datapath}/{{case}}/{{file_id}}/', datapath=DATAPATH),
+    bamdir=DATAPATH+'/{case}/{file_id}/'
   output:
-    bam=expand('{intpath}/{{case}}/{{file_id}}.{{chrN}}.bam', intpath=INTPATH)
+    bam=temp(INTPATH+'/{case}/{file_id}.{chrN}.bam')
   params:
     chrP='{chrN}'
   shell:
@@ -358,7 +363,7 @@ rule bamsplit:
 rule vcfGzip:
   priority: 2
   input: '{path}_somatic_{tool}.{chrN}.vcf'
-  output:'{path}_somatic_{tool}.{chrN}.vcf.gz'
+  output: temp('{path}_somatic_{tool}.{chrN}.vcf.gz')
   wildcard_constraints:
     tool="pindel|abra|platypus"
   shell:
